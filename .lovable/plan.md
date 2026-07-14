@@ -1,116 +1,55 @@
 
+## Goal
+Repurpose this project into a standalone mobile-first bill splitter called **Go Out Splitter**. Since the existing AssetWise scaffolding (auth, Supabase tables, dashboard, RBAC, AI chat) is unrelated to a calculator, we'll strip the app surface down to a single public route and reuse the design system tokens/typography inspiration (Onest font, warm-neutral or sleek dark) — you mentioned "in the same way taking inspo of the template", so I'll match its clean minimalist styling language, not its features.
 
-## Plan: Security hardening with RLS and user roles
+## Design direction
+- **Theme**: Sleek dark mode by default — near-black background, soft off-white text, single warm accent color for the highlighted "Per Person Share" and CTA affordances.
+- **Typography**: Keep Onest (already loaded). Large tabular-nums display for money values, sentence case labels.
+- **Layout**: Single centered column, max-width ~440px, generous vertical rhythm, 44px min touch targets, sticky result card on scroll for mobile.
 
-### Current state
-- RLS is enabled on all 4 tables (good)
-- All policies are wide-open: `for all to authenticated using (true) with check (true)`
-- No user_roles table exists
-- No role-checking functions exist
-- AI chat edge function uses service_role_key (bypasses RLS — no changes needed there)
-
-### What this changes
-
-**1. Database migration — new tables and functions**
-
-Create `app_role` enum, `user_roles` table, and `has_role` security definer function:
-
-```sql
--- Role enum
-CREATE TYPE public.app_role AS ENUM ('admin', 'moderator', 'user');
-
--- Roles table (NOT on profiles)
-CREATE TABLE public.user_roles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  role app_role NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (user_id, role)
-);
-
-ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
-
--- Users can only read their own roles
-CREATE POLICY "Users can view own roles"
-  ON public.user_roles FOR SELECT
-  TO authenticated
-  USING (auth.uid() = user_id);
-
--- Security definer function (avoids RLS recursion)
-CREATE OR REPLACE FUNCTION public.has_role(_user_id UUID, _role app_role)
-RETURNS BOOLEAN
-LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.user_roles
-    WHERE user_id = _user_id AND role = _role
-  )
-$$;
+## Screen structure (single route `/`)
+```text
+┌─────────────────────────────┐
+│ Go Out Splitter             │  header
+├─────────────────────────────┤
+│ Subtotal        [$ 0.00  ]  │
+│ Discount        [ 0   ][%|$]│  toggle pill
+│ GST %           [ 18     ]  │
+│ People          [ − ] 2 [+] │  stepper, min 2
+│ Who paid?       [Person A▾] │  dropdown, options = P1..Pn
+├─────────────────────────────┤
+│  PER PERSON                 │  large accent card
+│  $ 00.00                    │
+├─────────────────────────────┤
+│ Bill breakdown         [ ▾ ]│  collapsible
+│  Subtotal          $ 0.00   │
+│  Discount        − $ 0.00   │
+│  GST (18%)       + $ 0.00   │
+│  Final total       $ 0.00   │
+├─────────────────────────────┤
+│ Everyone else owes          │
+│ Person A $X.XX each         │
+└─────────────────────────────┘
 ```
 
-**2. Database migration — replace existing RLS policies**
+## Calculation logic (pure function, runs on every input change)
+1. `discountAmount = discountMode === '%' ? subtotal * (discount/100) : discount`
+2. `discountedSubtotal = max(0, subtotal − discountAmount)`
+3. `gstAmount = discountedSubtotal * (gst/100)`
+4. `finalTotal = discountedSubtotal + gstAmount`
+5. `perPerson = finalTotal / people`
+- All displayed values pass through `format(n) = isFinite(n) && n > 0 ? n.toFixed(2) : "0.00"`.
+- Inputs stored as strings; parsed with `parseFloat` fallback to 0. No NaN ever reaches the DOM.
+- `people` clamped to integer ≥ 2. "Who paid" auto-clamps if people count shrinks below current selection.
 
-Drop the 4 catch-all policies and replace with granular per-operation policies:
+## Files
+- **Replace** `src/routes/index.tsx` — the entire splitter UI + state (single `useState` per field or one reducer object). Set head `title="Go Out Splitter"` + description + og tags.
+- **Update** `src/routes/__root.tsx` — refresh default title/description to match the new app; keep `<Outlet />` intact.
+- **Update** `src/styles.css` — add a sleek dark palette (background, surface, muted, accent) as `@theme inline` tokens if not already suitable; keep existing token names so shadcn components still work. Default to dark by adding `class="dark"` on `<html>` in root.
+- **Reuse** shadcn `Input`, `Button`, `Label`, `Select`, `Collapsible`, `Switch` (or a segmented toggle built with two Buttons) from `src/components/ui/*`.
+- **Leave untouched**: Supabase integration files, existing auth/dashboard routes (they simply become unreachable from the homepage). No backend changes, no migrations.
 
-For **asset_categories**, **employees**, **assets**, **asset_assignments**:
-- `SELECT` — all authenticated users (internal staff all need read access)
-- `INSERT` — all authenticated users (staff create assets/employees)
-- `UPDATE` — all authenticated users OR restrict to admins (for categories/sensitive ops)
-- `DELETE` — admin only via `has_role(auth.uid(), 'admin')`
+## Out of scope
+- No persistence, no auth gating, no per-person itemization, no currency selector (uses `$` symbol only), no share/export. Say the word if you want any of these.
 
-Specific policies:
-
-| Table | SELECT | INSERT | UPDATE | DELETE |
-|---|---|---|---|---|
-| asset_categories | authenticated | authenticated | authenticated | admin only |
-| employees | authenticated | authenticated | authenticated | admin only |
-| assets | authenticated | authenticated (with `created_by = auth.uid()` check) | authenticated | admin only |
-| asset_assignments | authenticated | authenticated | authenticated | admin only |
-
-The `assets` INSERT policy adds `WITH CHECK (created_by = auth.uid())` to ensure users can't spoof the creator.
-
-**3. Auto-assign 'user' role on signup**
-
-Create a trigger function that assigns the default `'user'` role when a new user signs up:
-
-```sql
-CREATE OR REPLACE FUNCTION public.handle_new_user_role()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'user');
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER on_auth_user_created_role
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_role();
-```
-
-**4. Seed existing users with roles**
-
-Use the insert tool to give all existing users the `'user'` role, and optionally promote one to `'admin'`.
-
-**5. Add role-check hook (`src/lib/hooks.ts`)**
-
-Add a `useUserRole` query hook so the UI can check the current user's role for conditional rendering (e.g., hide delete buttons for non-admins). This is for UX only — the real enforcement is RLS.
-
-**6. No changes to AI chat**
-
-The edge function uses `SUPABASE_SERVICE_ROLE_KEY` which bypasses RLS entirely. No modifications needed.
-
-### Files changed
-
-| File | Action |
-|---|---|
-| Migration SQL | Create — roles table, has_role function, replace RLS policies, trigger |
-| `src/lib/hooks.ts` | Edit — add `useUserRole` hook |
-
-### What stays the same
-- All existing CRUD operations continue working for authenticated users
-- AI chat edge function untouched
-- No component changes needed (delete restrictions will surface as toast errors from RLS denials)
-
+Ready to build on approval.
