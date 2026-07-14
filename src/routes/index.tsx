@@ -33,11 +33,30 @@ function HomePage() {
     <main className="min-h-screen bg-background text-foreground">
       {/* Sticky top bar */}
       <div className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-3">
-          <div className="text-sm font-bold tracking-tight">
-            Go Out<span className="text-muted-foreground">·</span>Splitter
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-8">
+          <div className="text-sm font-bold tracking-tight md:text-base">
+            Go Out<span className="mx-1 text-muted-foreground">·</span>Splitter
           </div>
-          <div className="flex items-center rounded-full border border-border/60 bg-card p-0.5">
+
+          {/* Tabs — grow on desktop, sit inline */}
+          <div className="order-3 w-full md:order-2 md:w-auto md:flex-1 md:max-w-md md:mx-6">
+            <div className="grid grid-cols-2 rounded-2xl border border-border/60 bg-card p-1">
+              <TabBtn
+                active={tab === 'wallet'}
+                onClick={() => setTab('wallet')}
+                icon={<Wallet className="h-4 w-4" />}
+                label="My Wallet"
+              />
+              <TabBtn
+                active={tab === 'goout'}
+                onClick={() => setTab('goout')}
+                icon={<Users className="h-4 w-4" />}
+                label="Go Out"
+              />
+            </div>
+          </div>
+
+          <div className="order-2 flex items-center rounded-full border border-border/60 bg-card p-0.5 md:order-3">
             {(['USD', 'INR'] as const).map((c) => (
               <button
                 key={c}
@@ -56,32 +75,14 @@ function HomePage() {
             ))}
           </div>
         </div>
-
-        {/* Tabs */}
-        <div className="mx-auto w-full max-w-md px-4 pb-3">
-          <div className="grid grid-cols-2 rounded-2xl border border-border/60 bg-card p-1">
-            <TabBtn
-              active={tab === 'wallet'}
-              onClick={() => setTab('wallet')}
-              icon={<Wallet className="h-4 w-4" />}
-              label="My Wallet"
-            />
-            <TabBtn
-              active={tab === 'goout'}
-              onClick={() => setTab('goout')}
-              icon={<Users className="h-4 w-4" />}
-              label="Go Out"
-            />
-          </div>
-        </div>
       </div>
 
-      <div className="mx-auto w-full max-w-md px-5 pb-20 pt-6">
-        <header className="mb-6">
+      <div className="mx-auto w-full max-w-6xl px-5 pb-20 pt-6 md:px-8 md:pt-10">
+        <header className="mb-6 md:mb-10">
           <div className="mb-1 text-[11px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
             {tab === 'wallet' ? 'Personal tracker' : 'Split the tab'}
           </div>
-          <h1 className="text-3xl font-bold leading-tight tracking-tight">
+          <h1 className="text-3xl font-bold leading-tight tracking-tight md:text-4xl">
             {tab === 'wallet' ? 'My Wallet' : 'Go Out Splitter'}
           </h1>
         </header>
@@ -91,7 +92,9 @@ function HomePage() {
           className="animate-in fade-in-50 slide-in-from-bottom-2 duration-300"
         >
           {tab === 'wallet' ? (
-            <WalletTracker currency={currency} />
+            <div className="mx-auto w-full max-w-2xl">
+              <WalletTracker currency={currency} />
+            </div>
           ) : (
             <GoOutSplitter currency={currency} />
           )}
