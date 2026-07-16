@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Wallet, Users } from 'lucide-react';
 import { useLocalStorage } from '@/lib/use-local-storage';
@@ -9,11 +10,11 @@ import { cn } from '@/lib/utils';
 export const Route = createFileRoute('/')({
   head: () => ({
     meta: [
-      { title: 'Go Out Splitter — Bill splitter & wallet' },
+      { title: 'Go Out Splitter — Split bills beautifully' },
       {
         name: 'description',
         content:
-          'Split restaurant bills with friends and track your personal spending in one sleek app.',
+          'A premium bill splitter and personal wallet. Track shared expenses, calculate settlements, and share instantly.',
       },
     ],
   }),
@@ -24,75 +25,50 @@ type Tab = 'wallet' | 'goout';
 
 function HomePage() {
   const [tab, setTab] = useLocalStorage<Tab>('gos.tab', 'goout');
-  const [currency, setCurrency] = useLocalStorage<CurrencyCode>(
-    'gos.currency',
-    'USD',
-  );
+  const [currency, setCurrency] = useLocalStorage<CurrencyCode>('gos.currency', 'USD');
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      {/* Sticky top bar */}
-      <div className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-8">
-          <div className="text-sm font-bold tracking-tight md:text-base">
-            Go Out<span className="mx-1 text-muted-foreground">·</span>Splitter
-          </div>
+    <main
+      className="relative min-h-screen bg-background text-foreground antialiased"
+      style={{
+        backgroundImage:
+          'radial-gradient(circle at 1px 1px, rgba(0,0,0,0.045) 1px, transparent 0)',
+        backgroundSize: '22px 22px',
+      }}
+    >
+      {/* soft radial glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-[520px] opacity-70"
+        style={{
+          background:
+            'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,0,0,0.06), transparent 60%)',
+        }}
+      />
 
-          {/* Tabs — grow on desktop, sit inline */}
-          <div className="order-3 w-full md:order-2 md:w-auto md:flex-1 md:max-w-md md:mx-6">
-            <div className="grid grid-cols-2 rounded-2xl border border-border/60 bg-card p-1">
-              <TabBtn
-                active={tab === 'wallet'}
-                onClick={() => setTab('wallet')}
-                icon={<Wallet className="h-4 w-4" />}
-                label="My Wallet"
-              />
-              <TabBtn
-                active={tab === 'goout'}
-                onClick={() => setTab('goout')}
-                icon={<Users className="h-4 w-4" />}
-                label="Go Out"
-              />
-            </div>
-          </div>
+      {/* Top nav */}
+      <TopNav tab={tab} setTab={setTab} currency={currency} setCurrency={setCurrency} />
 
-          <div className="order-2 flex items-center rounded-full border border-border/60 bg-card p-0.5 md:order-3">
-            {(['USD', 'INR'] as const).map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCurrency(c)}
-                className={cn(
-                  'rounded-full px-3 py-1 text-xs font-semibold transition-colors',
-                  currency === c
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-                aria-pressed={currency === c}
-              >
-                {c === 'USD' ? '$ USD' : '₹ INR'}
-              </button>
-            ))}
+      <div className="relative z-10 mx-auto w-full max-w-6xl px-5 pb-24 pt-10 md:px-10 md:pt-16">
+        {/* Hero */}
+        <header className="mb-10 md:mb-14">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground backdrop-blur">
+            <span className="h-1.5 w-1.5 rounded-full bg-foreground/70" />
+            {tab === 'wallet' ? 'Personal tracker' : 'Group bill splitter'}
           </div>
-        </div>
-      </div>
-
-      <div className="mx-auto w-full max-w-6xl px-5 pb-20 pt-6 md:px-8 md:pt-10">
-        <header className="mb-6 md:mb-10">
-          <div className="mb-1 text-[11px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
-            {tab === 'wallet' ? 'Personal tracker' : 'Split the tab'}
-          </div>
-          <h1 className="text-3xl font-bold leading-tight tracking-tight md:text-4xl">
-            {tab === 'wallet' ? 'My Wallet' : 'Go Out Splitter'}
+          <h1 className="text-4xl font-semibold leading-[1.05] tracking-tight text-foreground md:text-6xl">
+            {tab === 'wallet' ? 'My Wallet.' : 'Go Out Splitter.'}
           </h1>
+          <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
+            {tab === 'wallet'
+              ? 'Log daily spending in seconds. Watch your day and month totals update instantly.'
+              : 'Split expenses effortlessly with friends. Track payments, calculate settlements, and share the summary beautifully.'}
+          </p>
         </header>
 
-        <div
-          key={tab}
-          className="animate-in fade-in-50 slide-in-from-bottom-2 duration-300"
-        >
+        <div key={tab} className="animate-in fade-in-50 slide-in-from-bottom-3 duration-500">
           {tab === 'wallet' ? (
-            <div className="mx-auto w-full max-w-2xl">
+            <div className="mx-auto w-full max-w-3xl">
               <WalletTracker currency={currency} />
             </div>
           ) : (
@@ -101,6 +77,81 @@ function HomePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function TopNav({
+  tab,
+  setTab,
+  currency,
+  setCurrency,
+}: {
+  tab: Tab;
+  setTab: (t: Tab) => void;
+  currency: CurrencyCode;
+  setCurrency: (c: CurrencyCode) => void;
+}) {
+  const [scrolled, setScrolled] = useState(false);
+  if (typeof window !== 'undefined') {
+    window.addEventListener?.(
+      'scroll',
+      () => setScrolled(window.scrollY > 8),
+      { passive: true, once: true },
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        'sticky top-0 z-40 border-b border-transparent transition-all duration-300',
+        scrolled && 'border-border bg-background/80 backdrop-blur-xl',
+      )}
+    >
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-5 py-4 md:px-10">
+        <div className="flex items-center gap-2">
+          <div className="grid h-8 w-8 place-items-center rounded-xl bg-foreground text-background text-sm font-bold">
+            G
+          </div>
+          <span className="hidden text-sm font-semibold tracking-tight sm:inline">
+            Go Out
+          </span>
+        </div>
+
+        <div className="flex items-center rounded-full border border-border bg-card p-1 shadow-sm">
+          <TabBtn
+            active={tab === 'wallet'}
+            onClick={() => setTab('wallet')}
+            icon={<Wallet className="h-4 w-4" />}
+            label="Wallet"
+          />
+          <TabBtn
+            active={tab === 'goout'}
+            onClick={() => setTab('goout')}
+            icon={<Users className="h-4 w-4" />}
+            label="Go Out"
+          />
+        </div>
+
+        <div className="flex items-center rounded-full border border-border bg-card p-0.5 shadow-sm">
+          {(['USD', 'INR'] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCurrency(c)}
+              className={cn(
+                'rounded-full px-3 py-1.5 text-xs font-semibold transition-all',
+                currency === c
+                  ? 'bg-foreground text-background'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+              aria-pressed={currency === c}
+            >
+              {c === 'USD' ? '$' : '₹'}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -120,14 +171,14 @@ function TabBtn({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-colors',
+        'flex h-9 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-medium transition-all',
         active
-          ? 'bg-primary text-primary-foreground shadow-sm'
+          ? 'bg-foreground text-background shadow-sm'
           : 'text-muted-foreground hover:text-foreground',
       )}
     >
       {icon}
-      {label}
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }
